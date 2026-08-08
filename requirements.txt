@@ -1,0 +1,73 @@
+# ── WizCodes Outreach Agent (Agent 5) — dependencies ──
+# Runtime: Python 3.11. Deployed on Modal. ONE requirements file for local dev,
+# CI and the Modal image.
+
+# ── Shared library ──
+# During build-out:  pip install -e ../wizcore
+# Modal image:       .add_local_python_source("wizcore")
+# Promote later to:  wizcore @ git+https://github.com/dkcodes121617/wizcore@v0.1.0
+
+# ── LangGraph ──
+# Earned for the same single reason as the Content Poster: an approval
+# interrupt() that must survive the container exiting. Nothing outward-facing
+# in this agent happens without a human pressing a button first.
+# Pinned to the 1.x major, verified installed: langgraph 1.2.10 /
+# langgraph-checkpoint-postgres 3.1.1. In 1.x, RetryPolicy and CachePolicy come
+# from `langgraph.types`, not `langgraph.pregel`.
+langgraph>=1.2,<2
+langchain-core>=0.3.30
+langgraph-checkpoint-postgres>=3.1,<4
+psycopg[binary,pool]>=3.2.0
+
+# ── HTTP ──
+httpx[http2]>=0.28.0
+requests>=2.32.0
+
+# ── Website assessment ──
+# No browser, deliberately — see ARCHITECTURE.md §6.3. The PageSpeed Insights
+# API returns the performance score, the mobile audit AND a full-page
+# screenshot in one free call, which removes the entire browser stack from the
+# common path. Raw HTML for the tech-stack fingerprints is one requests.get.
+# selectolax over BeautifulSoup+lxml: same job, no C build step, ~10x faster,
+# which matters when a discovery run checks a few hundred sites.
+selectolax>=0.3.21
+
+# ── Contact hygiene ──
+# An MX lookup before any pattern-guessed address is ever used. Sending to
+# addresses that do not resolve is the fastest way to wreck a sending domain's
+# reputation, and reputation is the only real risk in the email channel.
+dnspython>=2.7.0
+email-validator>=2.2.0
+# The entity_key normalisation. Must match the Lead Finder's implementation
+# exactly, which is why it lives in wizcore and not in either agent.
+tldextract>=5.1.0
+
+# ── LLM ──
+# Split by job: the Claude proxy (via wizcore) drafts the actual message, where
+# tone and persuasiveness decide whether it works. Groq runs the vision pass
+# over the PageSpeed screenshot and any bulk filtering — free, and nobody reads
+# its output directly.
+groq>=0.13.0
+
+python-dotenv>=1.0.1
+tenacity>=9.0.0
+
+# ── Deploy + lint tooling ──
+modal>=0.73.82
+ruff>=0.8.0
+
+# ── OPTIONAL: real-browser fallback, commented out on purpose ──
+# Uncomment ONLY if the PageSpeed path above proves insufficient — i.e. a
+# meaningful share of candidate sites block PSI or render nothing without JS.
+# playwright pulls a ~400 MB Chromium into the Modal image and turns a
+# 20-second cold start into a two-minute one, for a capability most WordPress
+# and Wix sites never need. After uncommenting:
+#     playwright install --with-deps chromium
+#
+# Lightpanda is deliberately absent even here. Its Playwright compatibility is
+# a declared work in progress and the failure mode is SILENT — a partially
+# implemented Web API sends Playwright down a different code path. For a job
+# whose entire output is a judgement about whether a site "looks fine", a
+# renderer that quietly renders differently is the worst possible tool.
+# playwright>=1.49.0
+# crawl4ai>=0.4.0
