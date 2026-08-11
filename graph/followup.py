@@ -40,7 +40,7 @@ from wizcore.obs.log import log_event
 from wizcore.telegram.send import esc, send
 
 from channels import email_brevo
-from compliance import suppression
+from compliance import suppression, warmup
 from config import AGENT_NAME
 from prompts.library import FOLLOWUP_SYSTEM, followup_user_prompt
 
@@ -112,7 +112,10 @@ def run(config, run_id: str, budget=None, reader=None) -> dict:
 
         remaining = min(
             config.max_emails_per_run,
-            max(0, config.max_emails_per_day - email_brevo.sent_today(conn)),
+            # Same warmed-up cap as the first-touch node. A follow-up is an
+            # email; the domain does not care which node sent it.
+            max(0, warmup.daily_cap(conn, config.max_emails_per_day)[0]
+                   - email_brevo.sent_today(conn)),
         )
 
         for row in rows:

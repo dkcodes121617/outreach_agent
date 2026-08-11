@@ -33,7 +33,7 @@ from assess import psi as psi_mod
 from assess import score as score_mod
 from assess import vision as vision_mod
 from channels import brevo_events, email_brevo, manual_send, telegram_commands
-from compliance import suppression
+from compliance import suppression, warmup
 from config import AGENT_NAME
 from enrich import email as email_enrich
 from enrich import verify as verify_mod
@@ -606,7 +606,14 @@ def make_deliver(config):
             return {"sent": [], "manual": [], "counters": counters}
 
         with connect(config.database_url) as conn:
-            remaining = max(0, config.max_emails_per_day - email_brevo.sent_today(conn)) \
+            # The cap is what the DOMAIN has earned, not what the config says.
+            # A new sending domain going straight to 20/day lands in spam and
+            # stays there — see compliance/warmup.py. This is the one ramp in
+            # the system that is not a preference.
+            cap, why = warmup.daily_cap(conn, config.max_emails_per_day)
+            if cap < config.max_emails_per_day:
+                log.info("sending cap %d today (%s)", cap, why)
+            remaining = max(0, cap - email_brevo.sent_today(conn)) \
                 if config.email_enabled() else 0
             remaining = min(remaining, config.max_emails_per_run)
 
