@@ -21,6 +21,8 @@ automated, because it is.
 """
 from __future__ import annotations
 
+from datetime import UTC
+
 import modal
 
 app = modal.App("wizcodes-outreach")
@@ -44,7 +46,8 @@ secret = modal.Secret.from_name("wizcodes-outreach")
     secrets=[secret],
     # 07:00 UTC on weekdays. The send step then jitters within the batch, so
     # recipients do not all receive mail in the same second.
-    schedule=modal.Cron("0 7 * * 1-5"),
+    # The only cron here. 07:00 and 09:00 UTC on weekdays; the dispatcher picks.
+    schedule=modal.Cron("0 7,9 * * 1-5"),
     timeout=1800,
     # Never two senders at once. The idempotency claims would make it safe, but
     # "safe" is not a reason to run two.
@@ -52,15 +55,33 @@ secret = modal.Secret.from_name("wizcodes-outreach")
     retries=0,
 )
 def scheduled() -> dict:
+    """The only cron here. 07:00 UTC is the first touch, 09:00 the follow-ups.
+
+    Consolidated because Modal's plan allows 5 scheduled functions per
+    workspace. The two jobs stay deliberately apart — a follow-up must never
+    ride the same run as the touch that created it — and it is the separate
+    HOURS that guarantee that, not separate crons.
+    """
+    from datetime import datetime
+
+    from config import CONFIG
     from main import run_once
 
+    if datetime.now(UTC).hour >= 9:
+        if not CONFIG.email_enabled():
+            return {"skipped": "email channel disabled"}
+        return run_once(CONFIG, followups_only=True)
     return run_once()
 
 
 @app.function(
     image=image,
     secrets=[secret],
-    schedule=modal.Cron("0 9 * * 1-5"),
+    # No cron of its own: Modal allows 5 scheduled functions per workspace, so
+    # `scheduled()` dispatches this at 09:00. The two stay logically separate —
+    # a follow-up must never ride the same run as the touch that created it —
+    # and being separate HOURS is what actually guarantees that, not being
+    # separate crons.
     timeout=900,
     max_containers=1,
     retries=0,
