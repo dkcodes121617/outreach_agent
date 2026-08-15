@@ -16,7 +16,7 @@ moved. It has, and further than expected. Checked against the live account on
     **404 model_not_found**.
   - `GET /openai/v1/models` lists **15 models and not one is multimodal** —
     they are text, audio (whisper/orpheus) and prompt-guard models.
-  - The ClaudeStore proxy is not a fallback either: a Messages request carrying
+  - The LLMsRelay proxy is not a fallback either: a Messages request carrying
     an `image` content block returns HTTP 200, but the model replies "I don't
     see any image attached". **The proxy silently strips image blocks.**
 
