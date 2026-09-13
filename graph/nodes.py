@@ -245,7 +245,15 @@ def make_assess(config, budget):
                         prospect.skip_reason = "website could not be assessed"
 
                 if prospect.skip_reason:
-                    skipped.append({"entity_key": prospect.entity_key, "why": prospect.skip_reason})
+                    # Not retired: a site that could not be assessed today may
+                    # simply have been down, and PageSpeed times out on slow
+                    # hosts — which is the exact population we want to reach.
+                    skipped.append({
+                        "entity_key": prospect.entity_key,
+                        "lead_id": prospect.lead_id,
+                        "why": prospect.skip_reason,
+                        "retire": False,
+                    })
                     continue
                 prospects.append(prospect)
 
@@ -399,7 +407,10 @@ def make_screen(config):
                 if prospect.weakness_score < config.min_weakness_score:
                     skipped.append({
                         "entity_key": prospect.entity_key,
+                        "lead_id": prospect.lead_id,
                         "why": f"weakness {prospect.weakness_score} < {config.min_weakness_score}",
+                        # Their site is fine. That is a verdict, not a hiccup.
+                        "retire": True,
                     })
                     continue
                 if not prospect.observation:
@@ -408,7 +419,9 @@ def make_screen(config):
                     # which is the exact thing that generates complaints.
                     skipped.append({
                         "entity_key": prospect.entity_key,
+                        "lead_id": prospect.lead_id,
                         "why": "no specific observation to open on",
+                        "retire": True,
                     })
                     continue
                 if config.email_enabled() and prospect.contact_email:
@@ -416,7 +429,12 @@ def make_screen(config):
                         conn, "email", prospect.contact_email
                     )
                     if blocked:
-                        skipped.append({"entity_key": prospect.entity_key, "why": reason})
+                        skipped.append({
+                            "entity_key": prospect.entity_key,
+                            "lead_id": prospect.lead_id,
+                            "why": reason,
+                            "retire": True,
+                        })
                         continue
                 kept.append(prospect)
 
@@ -722,6 +740,8 @@ def make_notify(config):
         if manual:
             manual_send.hand_over(config, manual)
 
+        _retire(config, skipped)
+
         if halted or sent or counters.get("send_failed"):
             lines = ["📧 <b>Outreach</b>"]
             if halted:
@@ -740,6 +760,46 @@ def make_notify(config):
         return {"counters": counters}
 
     return notify
+
+
+def _retire(config, skipped: list[dict]) -> None:
+    """Close out leads that were screened out for a PERMANENT reason.
+
+    Without this the queue is a treadmill. `release_claims` puts every
+    unfinished claim back to 'new', and `core.claim_leads()` orders by
+    `intent_score DESC NULLS LAST` — so the same highest-intent leads are
+    claimed, screened out for the same unchanging reason, released, and claimed
+    again on the very next run, forever. Nothing behind them is ever reached.
+
+    That was invisible while the only leads in the system were forum posts with
+    no website: every run looked busy, `screened_out` was non-zero, and the
+    queue never moved. It becomes load-bearing the moment there is a second tier
+    to reach — directory prospects carry no intent score, so they sort last and
+    would sit behind a permanently-recycling front of the queue indefinitely.
+
+    Only verdicts retire. A site that could not be assessed today keeps its
+    place, because "PageSpeed timed out" describes a slow host, which is the
+    population this agent exists to find.
+    """
+    lead_ids = [
+        s["lead_id"] for s in skipped
+        if s.get("retire") and s.get("lead_id")
+    ]
+    if not lead_ids or config.dry_run:
+        return
+    try:
+        with connect(config.database_url, autocommit=True) as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE core.leads SET status = 'expired', claimed_by = NULL, "
+                "claimed_at = NULL, claim_expires = NULL, updated_at = now() "
+                "WHERE lead_id = ANY(%s) AND status IN ('claimed', 'new', 'notified')",
+                (lead_ids,),
+            )
+            log.info("retired %d screened-out lead(s)", cur.rowcount)
+    except Exception:
+        # They stay claimable; the next run screens them out again. A failure
+        # here costs a repeated screen, never a wrong send.
+        log.warning("could not retire screened-out leads", exc_info=True)
 
 
 def release_claims(config, worker: str) -> None:
