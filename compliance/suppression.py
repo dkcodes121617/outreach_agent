@@ -62,11 +62,18 @@ def is_suppressed(conn, channel: str, value: str) -> tuple[bool, str]:
         if domain:
             checks.append(("domain", domain))
 
+    # Two parallel text[] arrays zipped back into pairs by unnest(). The obvious
+    # form - `(channel, value_norm) = ANY(%s)` with a list of tuples - cannot run
+    # at all: psycopg 3 sends tuples as anonymous records, which Postgres refuses
+    # as input ("input of anonymous composite types is not implemented"). Because
+    # this check only runs once a prospect has passed every other gate and has an
+    # address, that error fired at exactly the moment before a send, so no email
+    # was ever sent and every run that got that far crashed (8 from 18 Sep).
     rows = fetch_all(
         conn,
         "SELECT channel, value_norm, reason FROM core.suppressions "
-        "WHERE (channel, value_norm) = ANY(%s)",
-        (checks,),
+        "WHERE (channel, value_norm) IN (SELECT * FROM unnest(%s::text[], %s::text[]))",
+        ([c for c, _ in checks], [v for _, v in checks]),
     )
     if rows:
         row = rows[0]
