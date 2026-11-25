@@ -61,9 +61,10 @@ def send(config, to_email: str, to_name: str, subject: str, body: str) -> SendRe
         # important deliverability decision in this file.
         "textContent": text,
         "headers": headers,
-        # Brevo's per-message tracking switches. Both off: a tracking pixel is a
-        # third-party image request, which is the Promotions fingerprint.
-        "params": {},
+        # No `params` key. It holds template variables, not tracking switches,
+        # and Brevo rejects an empty one with 400 "params is blank" — that is
+        # what failed the first live send on 2026-11-25. Plain text has no
+        # template, and open tracking cannot attach to a text-only message.
         "tags": ["cold-outreach"],
     }
 
