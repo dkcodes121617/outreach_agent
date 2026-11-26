@@ -547,6 +547,7 @@ def make_draft(config, budget, reader: SiteReader):
                 "entity_key": prospect.entity_key,
                 "business_name": prospect.business_name,
                 "target": prospect.contact_email or prospect.website,
+                "website": prospect.website,
                 "subject": str(parsed.get("subject") or "").strip()[:120],
                 "body": body,
                 "observation": prospect.observation,
@@ -645,7 +646,9 @@ def make_deliver(config):
             remaining = min(remaining, config.max_emails_per_run)
 
             for draft in drafts:
-                if draft["channel"] != "email":
+                if draft["channel"] != "email" or config.email_send_mode == "manual":
+                    # Hand-sent from a real mailbox: no API, no warm-up cap, and
+                    # recorded as manual_pending until /done marks it sent.
                     manual_send.record(conn, state.get("run_id", ""), draft)
                     manual.append(draft)
                     continue

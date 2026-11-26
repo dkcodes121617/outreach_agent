@@ -95,6 +95,10 @@ def run(config, run_id: str, budget=None, reader=None) -> dict:
     counters = {"followups_due": 0, "followups_sent": 0, "followups_failed": 0}
     if not config.email_enabled():
         return counters
+    if config.email_send_mode == "manual":
+        # Nothing is sent through an email API in manual mode, follow-ups
+        # included - they would reach the same paused provider.
+        return counters
     if config.max_sequence_steps < 2:
         log.info("MAX_SEQUENCE_STEPS=%s - follow-ups disabled", config.max_sequence_steps)
         return counters

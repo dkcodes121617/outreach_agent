@@ -70,6 +70,13 @@ class Config:
 
     # ── sending ──
     email_provider: str = env_str("EMAIL_PROVIDER", "brevo").lower()
+    # "manual": email drafts are handed to Telegram, copy-ready, and sent by a
+    # person from their own mailbox. Nothing reaches an email API. Brevo paused
+    # the account on 2026-11-26 after the first API cold send bounced, and its
+    # terms only allow opted-in contacts, so manual is the only safe mode until
+    # a provider that permits cold outreach is set up.
+    email_send_mode: str = env_str("EMAIL_SEND_MODE", "manual").lower()
+    site_url: str = env_str("SITE_URL", "https://wizcodes.site")
     brevo_api_key: str = env_str("BREVO_API_KEY")
     from_email: str = env_str("OUTREACH_FROM_EMAIL")
     from_name: str = env_str("OUTREACH_FROM_NAME", "WizCodes")
