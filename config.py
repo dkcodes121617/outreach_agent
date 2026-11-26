@@ -61,6 +61,11 @@ class Config:
     email_patterns: list[str] = field(
         default_factory=lambda: env_list("EMAIL_PATTERNS", "info,contact,hello")
     )
+    # Off by default, and should stay off. A guessed `info@` passes the MX check
+    # whether or not the mailbox exists; the first one ever sent (2026-11-26)
+    # hard-bounced and got the sending account paused. Only addresses the
+    # business published itself are emailed.
+    allow_guessed_emails: bool = env_bool("ALLOW_GUESSED_EMAILS", False)
     tavily_api_key: str = env_str("TAVILY_API_KEY")
 
     # ── sending ──

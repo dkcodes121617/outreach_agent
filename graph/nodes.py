@@ -354,6 +354,12 @@ def make_enrich(config):
                     "ORDER BY verified DESC, created_at LIMIT 1",
                     (prospect.entity_key,),
                 )
+                if existing and (
+                    existing["provenance"] == "pattern_guess"
+                    and not config.allow_guessed_emails
+                ):
+                    # Stored before guesses were switched off. Not emailed.
+                    continue
                 if existing:
                     prospect.contact_email = existing["display"] or existing["value_norm"]
                     prospect.contact_provenance = existing["provenance"]
@@ -362,7 +368,10 @@ def make_enrich(config):
 
                 if not prospect.domain:
                     continue
-                for found in email_enrich.discover(prospect.domain, config.email_patterns):
+                patterns = config.email_patterns if config.allow_guessed_emails else []
+                for found in email_enrich.discover(prospect.domain, patterns):
+                    if found.provenance == "pattern_guess" and not config.allow_guessed_emails:
+                        continue
                     ok, detail = verify_mod.verify(found.address, config.require_mx_check)
                     if not ok:
                         continue
