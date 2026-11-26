@@ -82,6 +82,7 @@ def _message(config, draft: dict) -> str:
 
     if draft.get("log_id"):
         lines += ["", f"Sent it? Reply <code>/done {draft['log_id']}</code>"]
+    lines.append("<i>When they answer, swipe-reply here with what they said</i>")
     return "\n".join(lines).strip()
 
 
